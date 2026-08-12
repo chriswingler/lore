@@ -17,6 +17,7 @@ use crate::link::LoreLinkChangeEventData;
 use crate::lore::Address;
 use crate::lore::BranchId;
 use crate::lore::Hash;
+use crate::lore::RepositoryId;
 use crate::lore::execution_context;
 use crate::lore_debug;
 use crate::node::Node;
@@ -37,6 +38,13 @@ use crate::state::StateNodeChildrenIterator;
 use crate::util::path::RelativePath;
 use crate::util::path::RelativePathBuf;
 
+fn explicit_repository_id(identifier: &str) -> Option<RepositoryId> {
+    identifier
+        .parse::<RepositoryId>()
+        .ok()
+        .filter(|id| !id.is_zero())
+}
+
 pub async fn add(
     repository: Arc<RepositoryContext>,
     token: &RepositoryWriteToken,
@@ -46,18 +54,28 @@ pub async fn add(
     pin: Option<String>,
     disable_branching: bool,
 ) -> Result<(), LinkError> {
-    let (remote_url, name) = repository::parse_url(&link_identifier, false)
-        .forward_with::<LinkError, _>(|| {
-            format!("Invalid repository URL or ID: {link_identifier}")
-        })?;
+    // Layers already accept an exact repository id without first consulting
+    // the parent remote. Links must do the same: a module-specific resolver
+    // cannot route the id if URL parsing rejects it before `to_link_context`.
+    // Non-id spellings retain the existing URL/name lookup behavior.
+    let link = match explicit_repository_id(&link_identifier) {
+        Some(id) => id,
+        None => {
+            let (remote_url, name) = repository::parse_url(&link_identifier, false)
+                .forward_with::<LinkError, _>(|| {
+                    format!("Invalid repository URL or ID: {link_identifier}")
+                })?;
 
-    let context = execution_context();
-    let identity = context.globals().identity().unwrap_or_default();
-    let repository_data = repository::resolve_by_name(&remote_url, &name, identity)
-        .await
-        .forward_with::<LinkError, _>(|| format!("Repository not found: {link_identifier}"))?;
-
-    let link = repository_data.id;
+            let context = execution_context();
+            let identity = context.globals().identity().unwrap_or_default();
+            repository::resolve_by_name(&remote_url, &name, identity)
+                .await
+                .forward_with::<LinkError, _>(|| {
+                    format!("Repository not found: {link_identifier}")
+                })?
+                .id
+        }
+    };
 
     if link == repository.id {
         return Err(LinkError::internal(
@@ -428,4 +446,17 @@ pub async fn add(
     .send();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::explicit_repository_id;
+
+    #[test]
+    fn an_exact_nonzero_repository_id_bypasses_url_parsing() {
+        let id = "2e868641ce93b78bb922936e63ce495d";
+        assert_eq!(explicit_repository_id(id).unwrap().to_string(), id);
+        assert!(explicit_repository_id("00000000000000000000000000000000").is_none());
+        assert!(explicit_repository_id("module-name").is_none());
+    }
 }
