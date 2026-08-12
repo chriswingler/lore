@@ -313,7 +313,7 @@ pub async fn push(
         .await
         .forward::<PushError>("deserializing current state")?;
 
-    collect_fragments_and_push(
+    let parent_result = collect_fragments_and_push(
         repository.clone(),
         token,
         options.clone(),
@@ -321,7 +321,7 @@ pub async fn push(
         branch,
         local_latest,
     )
-    .await?;
+    .await;
 
     if let Ok(layers) = layer::list(repository.clone()).await {
         for layer in layers {
@@ -372,7 +372,11 @@ pub async fn push(
         }
     }
 
-    Ok(())
+    // Layer and Link repositories have independent branch pointers. A stale
+    // parent must not prevent their already-durable revisions from reaching
+    // their own remotes, but the parent failure still remains the operation's
+    // reported result after every independent cascade has been attempted.
+    parent_result
 }
 
 async fn collect_fragments_and_push(
