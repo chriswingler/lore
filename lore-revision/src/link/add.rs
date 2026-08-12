@@ -19,6 +19,7 @@ use crate::link::LoreLinkChangeEventData;
 use crate::lore::Address;
 use crate::lore::BranchId;
 use crate::lore::Hash;
+use crate::lore::RepositoryId;
 use crate::lore::execution_context;
 use crate::lore_debug;
 use crate::node::Node;
@@ -40,6 +41,13 @@ use crate::state::StateNodeChildrenIterator;
 use crate::util::path::RelativePath;
 use crate::util::path::RelativePathBuf;
 
+fn explicit_repository_id(identifier: &str) -> Option<RepositoryId> {
+    identifier
+        .parse::<RepositoryId>()
+        .ok()
+        .filter(|id| !id.is_zero())
+}
+
 pub async fn add(
     repository: Arc<RepositoryContext>,
     token: &RepositoryWriteToken,
@@ -49,6 +57,10 @@ pub async fn add(
     pin: Option<String>,
     disable_branching: bool,
 ) -> Result<(), LinkError> {
+    // Exact IDs reach the module resolver without consulting the parent remote.
+    let link = match explicit_repository_id(&link_identifier) {
+        Some(id) => id,
+        None => {
     // The identifier is a full URL or a bare name or ID, and only a scheme tells them apart:
     // `is_valid_name` permits scoped names like `org/project`, so a slash says nothing about
     // which form this is. A schemeless identifier names a repository on the same remote as
@@ -72,13 +84,16 @@ pub async fn add(
         (remote_url, link_identifier.clone())
     };
 
-    let context = execution_context();
-    let identity = context.globals().identity().unwrap_or_default();
-    let repository_data = repository::resolve_by_name(&remote_url, &name, identity)
-        .await
-        .forward_with::<LinkError, _>(|| format!("Repository not found: {link_identifier}"))?;
-
-    let link = repository_data.id;
+            let context = execution_context();
+            let identity = context.globals().identity().unwrap_or_default();
+            repository::resolve_by_name(&remote_url, &name, identity)
+                .await
+                .forward_with::<LinkError, _>(|| {
+                    format!("Repository not found: {link_identifier}")
+                })?
+                .id
+        }
+    };
 
     if link == repository.id {
         return Err(LinkError::internal(
@@ -474,6 +489,7 @@ pub async fn add(
     Ok(())
 }
 
+<<<<<<< HEAD
 /// Creates the directory the link mounts at and the one holding it, and stages the intermediate
 /// path against the innermost repository.
 ///
@@ -528,4 +544,17 @@ async fn create_link_mount(
     }
 
     Ok(())
+=======
+#[cfg(test)]
+mod tests {
+    use super::explicit_repository_id;
+
+    #[test]
+    fn an_exact_nonzero_repository_id_bypasses_url_parsing() {
+        let id = "2e868641ce93b78bb922936e63ce495d";
+        assert_eq!(explicit_repository_id(id).unwrap().to_string(), id);
+        assert!(explicit_repository_id("00000000000000000000000000000000").is_none());
+        assert!(explicit_repository_id("module-name").is_none());
+    }
+>>>>>>> 8a443db (Allow exact repository IDs in link add)
 }
