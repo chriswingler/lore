@@ -435,6 +435,16 @@ impl Endpoint {
             return None;
         }
 
+        // Saturation only happens under heavy load, where deriving initial keys per Initial just to
+        // reply with CONNECTION_REFUSED would starve packet processing for existing connections.
+        if self.cids_exhausted() || self.incoming_buffers.len() >= server_config.max_incoming {
+            debug!(
+                "ignoring initial for connection {} due to saturation",
+                dst_cid
+            );
+            return None;
+        }
+
         let crypto = match server_config.crypto.initial_keys(header.version, dst_cid) {
             Ok(keys) => keys,
             Err(UnsupportedVersion) => {
@@ -675,11 +685,6 @@ impl Endpoint {
         &mut self,
         header: &ProtectedInitialHeader,
     ) -> Result<(), TransportError> {
-        let config = &self.server_config.as_ref().unwrap();
-        if self.cids_exhausted() || self.incoming_buffers.len() >= config.max_incoming {
-            return Err(TransportError::CONNECTION_REFUSED(""));
-        }
-
         // RFC9000 §7.2 dictates that initial (client-chosen) destination CIDs must be at least 8
         // bytes. If this is a Retry packet, then the length must instead match our usual CID
         // length. If we ever issue non-Retry address validation tokens via `NEW_TOKEN`, then we'll
@@ -1200,7 +1205,7 @@ impl Incoming {
 }
 
 impl fmt::Debug for Incoming {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Incoming")
             .field("addresses", &self.addresses)
             .field("ecn", &self.ecn)

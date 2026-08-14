@@ -55,7 +55,7 @@ tracing-appender = { workspace = true }
 tracing-ecs = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
-opentelemetry-appender-tracing = "0.31.1"
+opentelemetry-appender-tracing = "0.32.0"
 opentelemetry-otlp = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 lore-base = { workspace = true }

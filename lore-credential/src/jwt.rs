@@ -69,14 +69,7 @@ where
 pub fn insecure_decode_token(
     token: &str,
 ) -> Result<TokenData<JWTUserInfo>, jsonwebtoken::errors::Error> {
-    let header = jsonwebtoken::decode_header(token)?;
-    let key = jsonwebtoken::DecodingKey::from_secret(&[]);
-    let mut validation = jsonwebtoken::Validation::new(header.alg);
-    validation.insecure_disable_signature_validation();
-    validation.validate_aud = false;
-    validation.validate_exp = false;
-    validation.validate_nbf = false;
-    jsonwebtoken::decode::<JWTUserInfo>(token, &key, &validation)
+    jsonwebtoken::dangerous::insecure_decode(token)
 }
 
 pub fn user_info_from_token(token: String) -> Option<UserInfo> {
@@ -119,4 +112,37 @@ pub fn verify_jwt_usage_for_remote(
     Err(JwtUsageError::internal(format!(
         "JWT 'aud' does not specify remote domain '{remote_domain}'"
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+
+    use super::*;
+
+    fn unsigned_token(payload: &str) -> String {
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"HS256","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(payload.as_bytes());
+        format!("{header}.{payload}.signature-is-intentionally-not-verified")
+    }
+
+    #[test]
+    fn insecure_decode_parses_the_claim_shape_without_verifying_the_signature() {
+        let token = unsigned_token(
+            r#"{"iss":"https://auth.example","sub":"user-1","name":"User One","preferred_username":"user","exp":42,"aud":"example"}"#,
+        );
+        let decoded = insecure_decode_token(&token).unwrap();
+        assert_eq!(decoded.claims.user_id, "user-1");
+        assert_eq!(decoded.claims.expires, 42);
+        assert_eq!(decoded.claims.audience, ["example"]);
+    }
+
+    #[test]
+    fn malformed_standard_claim_types_are_rejected() {
+        let token = unsigned_token(
+            r#"{"iss":"https://auth.example","sub":"user-1","name":"User One","exp":"never","aud":"example"}"#,
+        );
+        assert!(insecure_decode_token(&token).is_err());
+    }
 }

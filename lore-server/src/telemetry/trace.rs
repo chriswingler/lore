@@ -14,7 +14,6 @@ use lore_telemetry::tracing::fields::SAMPLING_TIER_LOW;
 use opentelemetry::Context;
 use opentelemetry::KeyValue;
 use opentelemetry::trace::Link;
-use opentelemetry::trace::SamplingResult;
 use opentelemetry::trace::SpanKind;
 use opentelemetry::trace::TraceId;
 use opentelemetry_otlp::SpanExporter;
@@ -23,6 +22,7 @@ use opentelemetry_sdk::trace::BatchConfigBuilder;
 use opentelemetry_sdk::trace::BatchSpanProcessor;
 use opentelemetry_sdk::trace::RandomIdGenerator;
 use opentelemetry_sdk::trace::Sampler;
+use opentelemetry_sdk::trace::SamplingResult;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::trace::ShouldSample;
 use tokio::runtime::Handle;
@@ -146,7 +146,6 @@ mod tests {
     use std::borrow::Cow;
     use std::time::SystemTime;
 
-    use opentelemetry::trace::SamplingDecision;
     use opentelemetry::trace::Span;
     use opentelemetry::trace::SpanContext;
     use opentelemetry::trace::SpanId;
@@ -154,6 +153,7 @@ mod tests {
     use opentelemetry::trace::TraceContextExt;
     use opentelemetry::trace::TraceFlags;
     use opentelemetry::trace::TraceState;
+    use opentelemetry_sdk::trace::SamplingDecision;
 
     use super::*;
 
